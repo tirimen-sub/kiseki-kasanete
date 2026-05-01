@@ -1,0 +1,165 @@
+{
+  "organic_insights_posts": [
+    {
+      "title": "",
+      "media_map_data": {
+        "\u00e3\u0083\u00a1\u00e3\u0083\u0087\u00e3\u0082\u00a3\u00e3\u0082\u00a2\u00e3\u0082\u00b5\u00e3\u0083\u00a0\u00e3\u0083\u008d\u00e3\u0082\u00a4\u00e3\u0083\u00ab": {
+          "uri": "media/other/17870723076018212.jpg",
+          "creation_timestamp": 1709102403,
+          "media_metadata": {
+            "photo_metadata": {
+              "exif_data": [
+                {
+                  "latitude": 36.987465419655,
+                  "longitude": 138.83153846508
+                },
+                {
+                  "iso": 20,
+                  "focal_length": "3.99",
+                  "lens_model": "iPhone SE (2nd generation) back camera 3.99mm f/1.8",
+                  "software": "17.3.1",
+                  "device_id": "092D66FF-99A7-4AEF-9D3A-54EFA358F580",
+                  "scene_type": 1,
+                  "camera_position": "back",
+                  "lens_make": "Apple",
+                  "date_time_digitized": "2024:02:28 09:56:39",
+                  "date_time_original": "2024:02:28 09:56:39",
+                  "source_type": "library",
+                  "aperture": "1.6959938128383605",
+                  "shutter_speed": "11.746693215758782",
+                  "metering_mode": "5"
+                }
+              ]
+            },
+            "camera_metadata": {
+              "has_camera_metadata": false
+            }
+          },
+          "title": "\u00f0\u009f\u008f\u0082\u00e2\u009b\u00b7\u00ef\u00b8\u008f\u00e2\u009b\u00b7\u00ef\u00b8\u008f\u00e2\u009b\u00b7\u00ef\u00b8\u008f",
+          "cross_post_source": {
+            "source_app": "FB"
+          }
+        }
+      },
+      "string_map_data": {
+        "\u00e4\u00bd\u009c\u00e6\u0088\u0090\u00e6\u0097\u00a5": {
+          "href": "",
+          "value": "",
+          "timestamp": 1709102403
+        },
+        "\u00e3\u0083\u0097\u00e3\u0083\u00ad\u00e3\u0083\u0095\u00e3\u0082\u00a3\u00e3\u0083\u00bc\u00e3\u0083\u00ab\u00e3\u0081\u00b8\u00e3\u0081\u00ae\u00e3\u0082\u00a2\u00e3\u0082\u00af\u00e3\u0082\u00bb\u00e3\u0082\u00b9": {
+          "href": "",
+          "value": "--",
+          "timestamp": 0
+        },
+        "\u00e3\u0082\u00a4\u00e3\u0083\u00b3\u00e3\u0083\u0097\u00e3\u0083\u00ac\u00e3\u0083\u0083\u00e3\u0082\u00b7\u00e3\u0083\u00a7\u00e3\u0083\u00b3": {
+          "href": "",
+          "value": "--",
+          "timestamp": 0
+        },
+        "\u00e3\u0083\u0095\u00e3\u0082\u00a9\u00e3\u0083\u00ad\u00e3\u0083\u00bc\u00e6\u0095\u00b0": {
+          "href": "",
+          "value": "--",
+          "timestamp": 0
+        },
+        "\u00e3\u0083\u00aa\u00e3\u0083\u00bc\u00e3\u0083\u0081\u00e3\u0081\u0097\u00e3\u0081\u009f\u00e3\u0082\u00a2\u00e3\u0082\u00ab\u00e3\u0082\u00a6\u00e3\u0083\u00b3\u00e3\u0083\u0088": {
+          "href": "",
+          "value": "--",
+          "timestamp": 0
+        },
+        "\u00e4\u00bf\u009d\u00e5\u00ad\u0098\u00e6\u0095\u00b0": {
+          "href": "",
+          "value": "0",
+          "timestamp": 0
+        },
+        "\u00e3\u0081\u0084\u00e3\u0081\u0084\u00e3\u0081\u00ad\u00ef\u00bc\u0081": {
+          "href": "",
+          "value": "44",
+          "timestamp": 0
+        },
+        "\u00e3\u0082\u00b3\u00e3\u0083\u00a1\u00e3\u0083\u00b3\u00e3\u0083\u0088\u00e6\u0095\u00b0": {
+          "href": "",
+          "value": "2",
+          "timestamp": 0
+        }
+      }
+    },
+    {
+      "title": "",
+      "media_map_data": {
+        "\u00e3\u0083\u00a1\u00e3\u0083\u0087\u00e3\u0082\u00a3\u00e3\u0082\u00a2\u00e3\u0082\u00b5\u00e3\u0083\u00a0\u00e3\u0083\u008d\u00e3\u0082\u00a4\u00e3\u0083\u00ab": {
+          "uri": "media/other/17992176026575414.jpg",
+          "creation_timestamp": 1707193902,
+          "media_metadata": {
+            "photo_metadata": {
+              "exif_data": [
+                {
+                  "iso": 3200,
+                  "focal_length": "40",
+                  "lens_model": "OLYMPUS M.40-150mm F4.0-5.6 R",
+                  "scene_capture_type": "standard",
+                  "software": "Version 1.0                    ",
+                  "device_id": "092D66FF-99A7-4AEF-9D3A-54EFA358F580",
+                  "camera_position": "unknown",
+                  "date_time_digitized": "2024:02:05 19:38:25",
+                  "date_time_original": "2024:02:05 19:38:25",
+                  "source_type": "library",
+                  "metering_mode": "5"
+                }
+              ]
+            },
+            "camera_metadata": {
+              "has_camera_metadata": false
+            }
+          },
+          "title": "\u00e3\u0081\u00b2\u00e3\u0081\u00a3\u00e3\u0081\u00a3\u00e3\u0081\u00a3\u00e3\u0081\u0095\u00e3\u0081\u0097\u00e3\u0081\u00b6\u00e3\u0082\u008a\u00e3\u0081\u00ae\u00e9\u009b\u00aa\u00e3\u0081\u00a7\u00e3\u0081\u0097\u00e3\u0081\u009f\u00e3\u0080\u0082\n\n\u00e2\u0080\u00a6\u00e5\u00af\u0092\u00e3\u0081\u0099\u00e3\u0081\u008e",
+          "cross_post_source": {
+            "source_app": "FB"
+          }
+        }
+      },
+      "string_map_data": {
+        "\u00e4\u00bd\u009c\u00e6\u0088\u0090\u00e6\u0097\u00a5": {
+          "href": "",
+          "value": "",
+          "timestamp": 1707193902
+        },
+        "\u00e3\u0083\u0097\u00e3\u0083\u00ad\u00e3\u0083\u0095\u00e3\u0082\u00a3\u00e3\u0083\u00bc\u00e3\u0083\u00ab\u00e3\u0081\u00b8\u00e3\u0081\u00ae\u00e3\u0082\u00a2\u00e3\u0082\u00af\u00e3\u0082\u00bb\u00e3\u0082\u00b9": {
+          "href": "",
+          "value": "--",
+          "timestamp": 0
+        },
+        "\u00e3\u0082\u00a4\u00e3\u0083\u00b3\u00e3\u0083\u0097\u00e3\u0083\u00ac\u00e3\u0083\u0083\u00e3\u0082\u00b7\u00e3\u0083\u00a7\u00e3\u0083\u00b3": {
+          "href": "",
+          "value": "--",
+          "timestamp": 0
+        },
+        "\u00e3\u0083\u0095\u00e3\u0082\u00a9\u00e3\u0083\u00ad\u00e3\u0083\u00bc\u00e6\u0095\u00b0": {
+          "href": "",
+          "value": "--",
+          "timestamp": 0
+        },
+        "\u00e3\u0083\u00aa\u00e3\u0083\u00bc\u00e3\u0083\u0081\u00e3\u0081\u0097\u00e3\u0081\u009f\u00e3\u0082\u00a2\u00e3\u0082\u00ab\u00e3\u0082\u00a6\u00e3\u0083\u00b3\u00e3\u0083\u0088": {
+          "href": "",
+          "value": "--",
+          "timestamp": 0
+        },
+        "\u00e4\u00bf\u009d\u00e5\u00ad\u0098\u00e6\u0095\u00b0": {
+          "href": "",
+          "value": "0",
+          "timestamp": 0
+        },
+        "\u00e3\u0081\u0084\u00e3\u0081\u0084\u00e3\u0081\u00ad\u00ef\u00bc\u0081": {
+          "href": "",
+          "value": "31",
+          "timestamp": 0
+        },
+        "\u00e3\u0082\u00b3\u00e3\u0083\u00a1\u00e3\u0083\u00b3\u00e3\u0083\u0088\u00e6\u0095\u00b0": {
+          "href": "",
+          "value": "2",
+          "timestamp": 0
+        }
+      }
+    }
+  ]
+}

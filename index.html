@@ -25,7 +25,26 @@
     <button id="theme-toggle-button" type="button" aria-label="ライトモードに切り替え">☀</button>
     <canvas id="minimap" width="220" height="220" aria-hidden="true"></canvas>
 
+    <button id="result-button" type="button" aria-label="時期ごとの移動距離を見る">🏁</button>
+
     <div id="help-backdrop"></div>
+    <div id="result-modal" role="dialog" aria-modal="true" aria-labelledby="result-title">
+        <div class="help-modal-header">
+            <div>
+                <div class="help-kicker">RESULT</div>
+                <h2 id="result-title">移動の記録</h2>
+            </div>
+            <button id="result-close-button" class="modal-close-button" type="button" aria-label="閉じる">×</button>
+        </div>
+        <div id="result-total" class="result-total"></div>
+        <ul id="result-era-list" class="result-era-list"></ul>
+        <section id="result-trips" class="result-trips" hidden>
+            <div class="result-section-title">旅の記録</div>
+            <div id="result-trip-tabs" class="result-trip-tabs" role="tablist"></div>
+            <ul id="result-trip-list" class="result-trip-list"></ul>
+            <p class="result-trip-hint">行を押すと、その日から再生します</p>
+        </section>
+    </div>
     <div id="help-modal" role="dialog" aria-modal="true" aria-labelledby="help-title">
         <div class="help-modal-header">
             <div>

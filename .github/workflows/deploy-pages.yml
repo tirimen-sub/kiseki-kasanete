@@ -39,7 +39,7 @@ jobs:
         run: |
           mkdir -p _site/data
           cp index.html style.css main.js trajectory-loader.js _site/
-          cp data/trajectory.bin.gz data/japan-prefectures.json data/philippines.json _site/data/
+          cp data/trajectory.bin.gz data/japan-prefectures.json data/philippines.json data/trips.json _site/data/
 
       - name: Upload site artifact
         uses: actions/upload-pages-artifact@v3

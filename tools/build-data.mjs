@@ -2,10 +2,11 @@
 // ==========================================
 // 移動ログ CSV と県境 GeoJSON を、ブラウザがすぐ使える形に前処理するスクリプト
 //
-//   node tools/build-data.mjs
+//   node tools/build-data.mjs                 … ルートの *_aslog.csv をすべて読み込む
+//   node tools/build-data.mjs a.csv b.csv     … ファイルを指定する
 //
 // 入力:
-//   260319_aslog.csv            … 位置ログ (約 45MB)
+//   *_aslog.csv                 … 位置ログ (期間ごとに分かれていてよい。重複行は自動で除く)
 //   data/japan-prefectures.json … 県境 (座標を丸めて軽量化したもの)
 // 出力:
 //   data/trajectory.bin.gz      … 時刻・緯度・経度・高度・累積距離を詰めたバイナリ (gzip)
@@ -20,7 +21,10 @@ import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const CSV_PATH = path.join(ROOT, process.argv[2] || '260319_aslog.csv');
+const CSV_PATHS = (process.argv.length > 2
+    ? process.argv.slice(2)
+    : fs.readdirSync(ROOT).filter(name => name.endsWith('_aslog.csv')).sort()
+).map(name => path.resolve(ROOT, name));
 const GEOJSON_PATH = path.join(ROOT, 'data/japan-prefectures.json');
 const OUT_PATH = path.join(ROOT, 'data/trajectory.bin.gz');
 
@@ -50,7 +54,7 @@ function parseCsvLine(line) {
     return cells;
 }
 
-function loadPoints(csvPath) {
+function loadPointsFromFile(csvPath, points, seen) {
     const lines = fs.readFileSync(csvPath, 'utf8').split(/\r?\n/);
     const header = parseCsvLine(lines[0].replace(/^﻿/, ''));
     const col = (name) => {
@@ -64,7 +68,8 @@ function loadPoints(csvPath) {
     const iAcc = col('精度:accuracy');
     const iAlt = col('高度:altitude');
 
-    const points = [];
+    let added = 0;
+    const fileKeys = [];
     for (let li = 1; li < lines.length; li++) {
         if (!lines[li]) continue;
         const c = parseCsvLine(lines[li]);
@@ -78,8 +83,23 @@ function loadPoints(csvPath) {
             time: new Date(c[iTime]).getTime(),
         };
         if (isNaN(p.time) || isNaN(p.lat) || isNaN(p.lon)) continue;
+        // 期間が重なったエクスポートを複数読んでも二重にならないよう、
+        // 先に読んだファイルにある行は飛ばす (同じファイル内の行はそのまま残す)
+        const key = `${p.time},${p.lat},${p.lon}`;
+        if (seen.has(key)) continue;
+        fileKeys.push(key);
         points.push(p);
+        added++;
     }
+    fileKeys.forEach(key => seen.add(key));
+    console.log(`${path.basename(csvPath)}: ${added} points`);
+}
+
+function loadPoints(csvPaths) {
+    if (csvPaths.length === 0) throw new Error('CSV が見つかりません (*_aslog.csv)');
+    const points = [];
+    const seen = new Set();
+    csvPaths.forEach(csvPath => loadPointsFromFile(csvPath, points, seen));
     points.sort((a, b) => a.time - b.time); // 安定ソート (ブラウザ版と同じ順序)
     return points;
 }
@@ -202,7 +222,7 @@ function deltaEncode(values, base) {
 
 function main() {
     const t0 = Date.now();
-    const points = loadPoints(CSV_PATH);
+    const points = loadPoints(CSV_PATHS);
     if (points.length === 0) throw new Error('有効な位置データがありません');
     console.log(`points: ${points.length}`);
 

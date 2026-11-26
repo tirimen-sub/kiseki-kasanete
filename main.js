@@ -450,22 +450,26 @@ window.BASE_HEIGHT = BASE_HEIGHT;
 
 const TIME_UNIV_1 = new Date('2024-03-10T00:00:00').getTime();
 const TIME_UNIV_2 = new Date('2025-03-31T00:00:00').getTime();
+const TIME_UNIV_3 = new Date('2026-04-01T00:00:00').getTime();
 
 const COLOR_HS = new THREE.Color(0xff0044); 
 const COLOR_U1 = new THREE.Color(0x00d2ff); 
 const COLOR_U2 = new THREE.Color(0x7fd36a); 
+const COLOR_U3 = new THREE.Color(0xb36bff);
 let showPrefectureReveal = true;
 
 function getEraCode(t) {
     if (t < TIME_UNIV_1) return 'hs';
     if (t < TIME_UNIV_2) return 'u1';
-    return 'u2';
+    if (t < TIME_UNIV_3) return 'u2';
+    return 'u3';
 }
 
 function getColorByTime(t) {
     if (t < TIME_UNIV_1) return COLOR_HS;
     if (t < TIME_UNIV_2) return COLOR_U1;
-    return COLOR_U2;
+    if (t < TIME_UNIV_3) return COLOR_U2;
+    return COLOR_U3;
 }
 
 function haversineDistance(lat1, lon1, lat2, lon2) {
@@ -478,10 +482,11 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
 
 const trajectoryGroup = new THREE.Group();
 scene.add(trajectoryGroup);
-const eraGroups = { hs: new THREE.Group(), u1: new THREE.Group(), u2: new THREE.Group() };
+const eraGroups = { hs: new THREE.Group(), u1: new THREE.Group(), u2: new THREE.Group(), u3: new THREE.Group() };
 trajectoryGroup.add(eraGroups.hs);
 trajectoryGroup.add(eraGroups.u1);
 trajectoryGroup.add(eraGroups.u2);
+trajectoryGroup.add(eraGroups.u3);
 
 const heatmapGroup = new THREE.Group();
 scene.add(heatmapGroup);
@@ -641,7 +646,7 @@ function updateDashboardStats(currentTime) {
     }
 }
 
-['hs', 'u1', 'u2'].forEach(era => {
+['hs', 'u1', 'u2', 'u3'].forEach(era => {
     document.getElementById(`toggle-${era}`).addEventListener('change', (e) => {
         eraGroups[era].visible = e.target.checked;
         updateTrajectory(currentProgress); 
@@ -791,7 +796,8 @@ function updateTrajectory(progress) {
 
         if (currentTime < TIME_UNIV_1) currentMarker.material.color.setHex(0xff0044);
         else if (currentTime < TIME_UNIV_2) currentMarker.material.color.setHex(0x00d2ff);
-        else currentMarker.material.color.setHex(0xccff00);
+        else if (currentTime < TIME_UNIV_3) currentMarker.material.color.setHex(0xccff00);
+        else currentMarker.material.color.setHex(0xb36bff);
 
         // 現在時刻までの累積距離 (trajectory-loader.js で二分探索)
         const currentDist = getCumulativeDistanceAt(currentTime);

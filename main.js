@@ -588,6 +588,8 @@ const resultCloseButton = document.getElementById('result-close-button');
 const resultTotal = document.getElementById('result-total');
 const resultEraList = document.getElementById('result-era-list');
 let resultShownAfterPlayback = false;
+// リザルトに載せる時期 (高校は含めない)。合計・割合もこの時期だけで計算する
+const RESULT_ERA_CODES = ['u1', 'u2', 'u3'];
 
 const formatDate = (t) => {
     const d = new Date(t);
@@ -619,11 +621,13 @@ function computeEraSummary() {
         else era.newPrefectures++;
     });
 
+    const shown = eras.filter(era => era.first >= 0 && RESULT_ERA_CODES.includes(era.code));
+    if (shown.length === 0) return null;
     return {
-        eras: eras.filter(era => era.first >= 0),
-        totalKm: trajectoryCumulativeKm[n - 1],
-        firstTime: trajectoryTimes[0],
-        lastTime: trajectoryTimes[n - 1],
+        eras: shown,
+        totalKm: shown.reduce((sum, era) => sum + era.km, 0),
+        firstTime: trajectoryTimes[shown[0].first],
+        lastTime: trajectoryTimes[shown[shown.length - 1].last],
     };
 }
 
@@ -633,7 +637,7 @@ function renderResultModal() {
     const maxKm = Math.max(...summary.eras.map(era => era.km), 1);
 
     resultTotal.innerHTML = `
-        <span class="result-total-label">総移動距離</span>
+        <span class="result-total-label">大学での総移動距離</span>
         <span class="result-total-value">${formatKm(summary.totalKm)}<span class="result-unit"> km</span></span>
         <span class="result-period">${formatDate(summary.firstTime)} 〜 ${formatDate(summary.lastTime)}</span>`;
 

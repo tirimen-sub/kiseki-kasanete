@@ -121,7 +121,11 @@ window.PREFECTURE_FILL_TARGET_OPACITY = PREFECTURE_FILL_TARGET_OPACITY;
 
 // 出典: 地球地図日本 (dataofjapan/land の japan.geojson を座標丸め・軽量化したもの)
 const JAPAN_PREF_JSON_URL = 'data/japan-prefectures.json';
+// 出典: Natural Earth (パブリックドメイン)。訪れたら現れるが、都道府県数には数えない
+const OVERSEAS_REGION_JSON_URLS = ['data/philippines.json'];
 const prefectureRegionData = [];
+const overseasRegionNames = new Set();
+const isDomesticRegion = (region) => !region.overseas;
 const prefectureBorderMeshes = new Map();
 const prefectureRevealMeshes = new Map();
 const prefectureRevealState = new Map();
@@ -152,7 +156,7 @@ function updateMinimapPosition() {
 }
 
 function computeJapanBounds() {
-    if (!prefectureRegionData || prefectureRegionData.length === 0) return null;
+    if (!prefectureRegionData.some(isDomesticRegion)) return null;
     let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
     const visitCoords = (coords) => {
         if (!Array.isArray(coords)) return;
@@ -169,7 +173,7 @@ function computeJapanBounds() {
         }
         coords.forEach(visitCoords);
     };
-    prefectureRegionData.forEach(region => {
+    prefectureRegionData.filter(isDomesticRegion).forEach(region => {
         const coords = region.geometry && region.geometry.coordinates;
         visitCoords(coords);
     });
@@ -221,7 +225,7 @@ function getMinimapBaseLayer(rect) {
     // draw japan extents
     ctx.strokeStyle = appThemeMode === 'light' ? 'rgba(150, 150, 150, 0.9)' : 'rgba(210, 210, 210, 0.9)';
     ctx.lineWidth = 1;
-    prefectureRegionData.forEach(region => {
+    prefectureRegionData.filter(isDomesticRegion).forEach(region => {
         const coords = region.geometry && region.geometry.coordinates;
         drawMinimapGeometry(ctx, coords, rect);
     });
@@ -298,7 +302,9 @@ function registerPrefectureFeature(feature) {
     const label = extractPrefectureLabel(feature.properties || {});
     if (!label) return;
 
-    prefectureRegionData.push({ name: label, geometry: feature.geometry });
+    const overseas = Boolean(feature.properties && feature.properties.overseas);
+    prefectureRegionData.push({ name: label, geometry: feature.geometry, overseas });
+    if (overseas) overseasRegionNames.add(label);
 
     const polygons = feature.geometry.type === 'Polygon' ? [feature.geometry.coordinates] : feature.geometry.coordinates;
     const fillGroup = new THREE.Group();
@@ -412,24 +418,30 @@ function updatePrefectureRevealAnimation() {
     refreshPrefectureRevealGroupVisibility();
 }
 
-const prefectureDataPromise = fetch(JAPAN_PREF_JSON_URL)
-    .then(response => {
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
-    })
-    .then(data => {
-        data.features.forEach(feature => {
-            if (!feature.geometry) return;
-            registerPrefectureFeature(feature);
+function loadRegionGeoJSON(url) {
+    return fetch(url)
+        .then(response => {
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return response.json();
+        })
+        .then(data => {
+            data.features.forEach(feature => {
+                if (!feature.geometry) return;
+                registerPrefectureFeature(feature);
+            });
+            japanBounds = null;
+            minimapBaseLayer = null; // 県境が揃ったのでミニマップの下絵を作り直す
+            if (latestPlaybackTime != null) syncPrefectureRevealToTime(latestPlaybackTime);
+            return data;
+        })
+        .catch((error) => {
+            console.warn(`${url} failed to load; continuing without it.`, error);
+            return null;
         });
-        minimapBaseLayer = null; // 県境が揃ったのでミニマップの下絵を作り直す
-        if (latestPlaybackTime != null) syncPrefectureRevealToTime(latestPlaybackTime);
-        return data;
-    })
-    .catch((error) => {
-        console.warn('Prefecture GeoJSON failed to load; continuing without reveal layer.', error);
-        return null;
-    });
+}
+
+const prefectureDataPromise = loadRegionGeoJSON(JAPAN_PREF_JSON_URL);
+OVERSEAS_REGION_JSON_URLS.forEach(loadRegionGeoJSON);
 
 function drawPolygon(coords, group) {
     if (!coords[0]) return;
@@ -630,8 +642,15 @@ let isPlaying = true;
 let currentProgress = 0; 
 
 function updateDashboardStats(currentTime) {
-    if (visitedPrefectureCount) visitedPrefectureCount.textContent = String(visitedPrefectures.size);
-    if (prefectureTotalCount) prefectureTotalCount.textContent = prefectureRegionData.length > 0 ? String(prefectureRegionData.length) : '--';
+    if (visitedPrefectureCount) {
+        let domesticVisited = 0;
+        visitedPrefectures.forEach(name => { if (!overseasRegionNames.has(name)) domesticVisited++; });
+        visitedPrefectureCount.textContent = String(domesticVisited);
+    }
+    if (prefectureTotalCount) {
+        const domesticTotal = prefectureRegionData.filter(isDomesticRegion).length;
+        prefectureTotalCount.textContent = domesticTotal > 0 ? String(domesticTotal) : '--';
+    }
     if (dashboardProgress) {
         const percent = totalVertices > 0 ? Math.min(100, Math.max(0, Math.round((currentProgress / totalVertices) * 100))) : 0;
         dashboardProgress.textContent = `${percent}%`;

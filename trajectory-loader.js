@@ -107,7 +107,7 @@ function decodeTrajectoryBuffer(buffer) {
     if (magic !== 'KSKT') throw new Error('trajectory データの形式が不正です');
     const headerLength = view.getUint32(4, true);
     const header = JSON.parse(new TextDecoder().decode(new Uint8Array(buffer, 8, headerLength)));
-    if (header.version !== 1) throw new Error(`未対応の trajectory データ (version ${header.version})`);
+    if (header.version !== 2) throw new Error(`未対応の trajectory データ (version ${header.version})`);
 
     const n = header.count;
     let offset = 8 + headerLength;
@@ -133,6 +133,8 @@ function decodeTrajectoryBuffer(buffer) {
         alt: columns.alt,
         distKm: columns.dist, // scale.dist = 1000 なので復元値は km
         prefectureFirstVisit: header.prefectureFirstVisit || {},
+        // 出発点のインデックス → 到着点のインデックス
+        flightArrivalByDeparture: new Map((header.flights || []).map(([dep, arr]) => [dep, arr])),
     };
 }
 
@@ -172,45 +174,35 @@ function splitIntoSegments(data) {
     return segments;
 }
 
-function buildSegmentGeometry(data, segment) {
+// 区間内で実際に頂点にする点の並びを決める。
+// 飛行区間 (ビルド時に検出) は出発点と到着点だけを残して 1 本の放物線にする。
+// 記録が途切れて 150km 以上飛んだ移動も放物線で結ぶ。
+const FLIGHT_THRESHOLD_KM = 150;
+
+function planSegmentPath(data, segment) {
     const { start, end } = segment;
-    const length = end - start;
-    const SMOOTH_WINDOW = 2;
-    const FLIGHT_THRESHOLD = 150;
+    const nodes = [{ index: start, arcKm: 0 }];
+    let k = start;
+    while (k < end - 1) {
+        const arrival = data.flightArrivalByDeparture.get(k);
+        const next = (arrival !== undefined && arrival < end) ? arrival : k + 1;
+        const dist = haversineDistance(data.lat[k], data.lon[k], data.lat[next], data.lon[next]);
+        const isArc = next !== k + 1 || dist > FLIGHT_THRESHOLD_KM;
+        nodes.push({ index: next, arcKm: isArc ? dist : 0 });
+        k = next;
+    }
+    return nodes;
+}
+
+const arcStepsFor = (km) => Math.min(40, Math.max(10, Math.floor(km * 0.25)));
+
+function buildSegmentGeometry(data, segment) {
     const { CENTER_LON, CENTER_LAT, SCALE, BASE_HEIGHT, ALT_SCALE } = window;
+    const nodes = planSegmentPath(data, segment);
 
-    // 高度を前後 2 点で移動平均
-    const smoothedAlt = new Float32Array(length);
-    for (let i = 0; i < length; i++) {
-        let sum = 0;
-        let count = 0;
-        const from = Math.max(0, i - SMOOTH_WINDOW);
-        const to = Math.min(length - 1, i + SMOOTH_WINDOW);
-        for (let j = from; j <= to; j++) {
-            sum += data.alt[start + j];
-            count++;
-        }
-        smoothedAlt[i] = sum / count;
-    }
+    let vertexCount = 0;
+    nodes.forEach(node => { vertexCount += node.arcKm > 0 ? arcStepsFor(node.arcKm) : 1; });
 
-    // 1 パス目: 頂点数を数える (長距離移動は放物線で補間するので点が増える)
-    const arcSteps = new Uint8Array(length);
-    const hopDistance = new Float32Array(length);
-    let vertexCount = 1;
-    for (let i = 1; i < length; i++) {
-        const a = start + i - 1;
-        const b = start + i;
-        const dist = haversineDistance(data.lat[a], data.lon[a], data.lat[b], data.lon[b]);
-        hopDistance[i] = dist;
-        if (dist > FLIGHT_THRESHOLD) {
-            arcSteps[i] = Math.min(40, Math.max(10, Math.floor(dist * 0.25)));
-            vertexCount += arcSteps[i];
-        } else {
-            vertexCount += 1;
-        }
-    }
-
-    // 2 パス目: 型付き配列に直接書き込む
     const positions = new Float32Array(vertexCount * 3);
     const colors = new Float32Array(vertexCount * 3);
     const times = new Float64Array(vertexCount);
@@ -228,16 +220,15 @@ function buildSegmentGeometry(data, segment) {
     };
 
     let prevX = 0, prevY = 0, prevZ = 0, prevT = 0;
-    for (let i = 0; i < length; i++) {
-        const k = start + i;
+    nodes.forEach(({ index: k, arcKm }) => {
         const x = (data.lon[k] - CENTER_LON) * SCALE;
-        const y = BASE_HEIGHT + (smoothedAlt[i] * ALT_SCALE);
+        const y = BASE_HEIGHT + (data.alt[k] * ALT_SCALE); // 表示用高度 (ビルド時に平滑化済み)
         const z = -(data.lat[k] - CENTER_LAT) * SCALE;
         const t = data.time[k];
 
-        if (i > 0 && arcSteps[i] > 0) {
-            const steps = arcSteps[i];
-            const arcHeight = Math.max(prevY, y) + (hopDistance[i] * 0.005);
+        if (arcKm > 0) {
+            const steps = arcStepsFor(arcKm);
+            const arcHeight = Math.max(prevY, y) + (arcKm * 0.005);
             const midX = (prevX + x) / 2;
             const midZ = (prevZ + z) / 2;
             for (let j = 1; j <= steps; j++) {
@@ -256,7 +247,7 @@ function buildSegmentGeometry(data, segment) {
             pushVertex(x, y, z, t);
         }
         prevX = x; prevY = y; prevZ = z; prevT = t;
-    }
+    });
 
     return { positions, colors, times, vertexCount };
 }

@@ -1167,3 +1167,145 @@ body.theme-light .result-era-meta {
 body.theme-light .result-era-notes {
     color: #334155;
 }
+
+/* ---------- 旅の記録 ---------- */
+.result-trips {
+    margin-top: 16px;
+}
+
+.result-section-title {
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: #aaaaaa;
+    margin-bottom: 8px;
+}
+
+.result-trip-tabs {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.result-trip-tab {
+    display: grid;
+    gap: 2px;
+    justify-items: center;
+    padding: 8px 4px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.04);
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.result-trip-tab.active {
+    border-color: rgba(155, 215, 255, 0.55);
+    background: rgba(155, 215, 255, 0.14);
+}
+
+.result-trip-tab-label {
+    font-size: 11px;
+    color: #bbbbbb;
+}
+
+.result-trip-tab-count {
+    font-size: 18px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.result-trip-tab-count small {
+    font-size: 11px;
+    font-weight: 400;
+    margin-left: 1px;
+}
+
+.result-trip-tab-nights {
+    font-size: 11px;
+    color: #999999;
+}
+
+.result-trip-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 4px;
+}
+
+.result-trip-row {
+    width: 100%;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: baseline;
+    gap: 12px;
+    padding: 9px 12px;
+    border: none;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.04);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.result-trip-row:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.result-trip-date {
+    font-size: 12px;
+    color: #bbbbbb;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.result-trip-place {
+    font-size: 13px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.result-trip-nights {
+    font-size: 12px;
+    color: #bbbbbb;
+    white-space: nowrap;
+}
+
+.result-trip-hint {
+    margin: 8px 0 0;
+    font-size: 11px;
+    color: #888888;
+}
+
+body.theme-light .result-section-title,
+body.theme-light .result-trip-tab-label,
+body.theme-light .result-trip-date,
+body.theme-light .result-trip-nights {
+    color: #475569;
+}
+
+body.theme-light .result-trip-tab-nights,
+body.theme-light .result-trip-hint {
+    color: #64748b;
+}
+
+body.theme-light .result-trip-tab {
+    border-color: rgba(15, 23, 42, 0.1);
+    background: rgba(15, 23, 42, 0.03);
+}
+
+body.theme-light .result-trip-tab.active {
+    border-color: rgba(29, 78, 216, 0.45);
+    background: rgba(29, 78, 216, 0.08);
+}
+
+body.theme-light .result-trip-row {
+    background: rgba(15, 23, 42, 0.03);
+}
+
+body.theme-light .result-trip-row:hover {
+    background: rgba(15, 23, 42, 0.07);
+}

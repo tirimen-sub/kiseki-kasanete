@@ -663,8 +663,113 @@ function renderResultModal() {
     }).join('');
 }
 
+// ---------- 旅の記録 (data/trips.json) ----------
+const TRIP_KINDS = [
+    { kind: 'travel', label: '旅行' },
+    { kind: 'detour', label: '寄り道' },
+    { kind: 'homecoming', label: '帰省' },
+    { kind: 'nearby', label: '近場' },
+];
+const resultTrips = document.getElementById('result-trips');
+const resultTripTabs = document.getElementById('result-trip-tabs');
+const resultTripList = document.getElementById('result-trip-list');
+let tripRecords = [];
+let selectedTripKind = 'travel';
+
+fetch('data/trips.json')
+    .then(response => (response.ok ? response.json() : null))
+    .then(data => {
+        tripRecords = (data && Array.isArray(data.trips)) ? data.trips : [];
+        if (resultModal && resultModal.classList.contains('visible')) renderTripSection();
+    })
+    .catch(error => console.warn('trips.json failed to load', error));
+
+// 'YYYY-MM-DD' を日本時間のその日 0 時として扱う
+const tripDateToTime = (ymd) => new Date(`${ymd}T00:00:00+09:00`).getTime();
+
+function formatTripRange(trip) {
+    const [sy, sm, sd] = trip.start.split('-').map(Number);
+    const [ey, em, ed] = trip.end.split('-').map(Number);
+    if (trip.start === trip.end) return `${sy}/${sm}/${sd}`;
+    return `${sy}/${sm}/${sd}〜${ey !== sy ? `${ey}/` : ''}${em}/${ed}`;
+}
+
+function renderTripSection() {
+    if (!resultTrips || !resultTripTabs || !resultTripList) return;
+    resultTrips.hidden = tripRecords.length === 0;
+    if (tripRecords.length === 0) return;
+
+    resultTripTabs.innerHTML = TRIP_KINDS.map(({ kind, label }) => {
+        const items = tripRecords.filter(trip => trip.kind === kind);
+        const nights = items.reduce((sum, trip) => sum + (trip.nights || 0), 0);
+        const active = kind === selectedTripKind;
+        return `<button type="button" role="tab" class="result-trip-tab${active ? ' active' : ''}" data-kind="${kind}" aria-selected="${active}">
+            <span class="result-trip-tab-label">${label}</span>
+            <span class="result-trip-tab-count">${items.length}<small>回</small></span>
+            <span class="result-trip-tab-nights">${nights}泊</span>
+        </button>`;
+    }).join('');
+
+    resultTripList.innerHTML = tripRecords
+        .map((trip, index) => ({ trip, index }))
+        .filter(({ trip }) => trip.kind === selectedTripKind)
+        .map(({ trip, index }) => `
+            <li><button type="button" class="result-trip-row" data-index="${index}">
+                <span class="result-trip-date">${formatTripRange(trip)}</span>
+                <span class="result-trip-place">${trip.place}</span>
+                <span class="result-trip-nights">${trip.nights > 0 ? `${trip.nights}泊` : '日帰り'}</span>
+            </button></li>`)
+        .join('');
+}
+
+// 指定した時刻に対応する再生位置 (頂点の通し番号) を探す
+function progressForTime(time) {
+    for (const line of trajectoryLines) {
+        if (line.times[line.count - 1] < time) continue;
+        let low = 0;
+        let high = line.count - 1;
+        while (low < high) {
+            const mid = (low + high) >> 1;
+            if (line.times[mid] >= time) high = mid;
+            else low = mid + 1;
+        }
+        return line.startIndex + low + 1;
+    }
+    return totalVertices;
+}
+
+function playFromTime(time) {
+    if (totalVertices <= 0) return;
+    currentProgress = Math.min(totalVertices, progressForTime(time));
+    if (seekBar) seekBar.value = currentProgress;
+    updateTrajectory(currentProgress);
+    // フォローカメラが日本列島を横切ってゆっくり移動しないよう、追従位置を一気に合わせる
+    if (window.currentTipPos) smoothedTipPos.copy(window.currentTipPos);
+    isPlaying = true;
+    if (playBtn) playBtn.innerText = '⏸';
+    closeResultModal();
+}
+
+if (resultTripTabs) {
+    resultTripTabs.addEventListener('click', (event) => {
+        const tab = event.target.closest('[data-kind]');
+        if (!tab) return;
+        selectedTripKind = tab.dataset.kind;
+        renderTripSection();
+    });
+}
+if (resultTripList) {
+    resultTripList.addEventListener('click', (event) => {
+        const row = event.target.closest('[data-index]');
+        if (!row) return;
+        const trip = tripRecords[Number(row.dataset.index)];
+        if (trip) playFromTime(tripDateToTime(trip.start));
+    });
+}
+
 function openResultModal() {
     renderResultModal();
+    renderTripSection();
     closeHelpModal();
     if (resultModal) resultModal.classList.add('visible');
     if (helpBackdrop) helpBackdrop.classList.add('visible');

@@ -119,15 +119,14 @@ window.CENTER_LAT = CENTER_LAT;
 window.SCALE = SCALE;
 window.PREFECTURE_FILL_TARGET_OPACITY = PREFECTURE_FILL_TARGET_OPACITY;
 
-const JAPAN_PREF_JSON_URL = 'https://raw.githubusercontent.com/dataofjapan/land/master/japan.geojson';
+// 出典: 地球地図日本 (dataofjapan/land の japan.geojson を座標丸め・軽量化したもの)
+const JAPAN_PREF_JSON_URL = 'data/japan-prefectures.json';
 const prefectureRegionData = [];
 const prefectureBorderMeshes = new Map();
 const prefectureRevealMeshes = new Map();
 const prefectureRevealState = new Map();
 let prefectureRevealEnabled = true;
-let prefectureRevealCursor = 0;
 let latestPlaybackTime = null;
-let lastPlaybackTime = null;
 let currentTipPos = null;
 let cameraMode = 'follow'; // 'free' or 'follow'
 let followHeight = 35;
@@ -141,6 +140,8 @@ const visitedPrefectures = new Set();
 const minimapCanvas = document.getElementById('minimap');
 let minimapCtx = null;
 let japanBounds = null; // {minX,maxX,minZ,maxZ}
+// 県境の下絵はテーマごとに一度だけ描いて使い回す (毎フレーム 47 県分の折れ線を描くと重い)
+let minimapBaseLayer = null; // { theme, canvas }
 
 function updateMinimapPosition() {
     if (!minimapCanvas) return;
@@ -205,6 +206,29 @@ function drawMinimapGeometry(ctx, coords, rect) {
     coords.forEach(child => drawMinimapGeometry(ctx, child, rect));
 }
 
+function getMinimapBaseLayer(rect) {
+    if (minimapBaseLayer && minimapBaseLayer.theme === appThemeMode) return minimapBaseLayer.canvas;
+    const layer = document.createElement('canvas');
+    layer.width = minimapCanvas.width;
+    layer.height = minimapCanvas.height;
+    const ctx = layer.getContext('2d');
+    // background
+    ctx.fillStyle = appThemeMode === 'light' ? '#ffffff' : '#0a0f14';
+    ctx.fillRect(0, 0, layer.width, layer.height);
+    ctx.strokeStyle = appThemeMode === 'light' ? 'rgba(20, 20, 20, 0.35)' : 'rgba(245, 245, 245, 0.35)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0.5, 0.5, layer.width - 1, layer.height - 1);
+    // draw japan extents
+    ctx.strokeStyle = appThemeMode === 'light' ? 'rgba(150, 150, 150, 0.9)' : 'rgba(210, 210, 210, 0.9)';
+    ctx.lineWidth = 1;
+    prefectureRegionData.forEach(region => {
+        const coords = region.geometry && region.geometry.coordinates;
+        drawMinimapGeometry(ctx, coords, rect);
+    });
+    minimapBaseLayer = { theme: appThemeMode, canvas: layer };
+    return layer;
+}
+
 function updateMinimap() {
     if (!minimapCanvas) return;
     if (!minimapCtx) minimapCtx = minimapCanvas.getContext('2d');
@@ -212,20 +236,8 @@ function updateMinimap() {
     const rect = { x: 6, y: 6, width: minimapCanvas.width - 12, height: minimapCanvas.height - 12 };
     if (!japanBounds) computeJapanBounds();
     minimapCtx.clearRect(0,0,minimapCanvas.width,minimapCanvas.height);
-    // background
-    minimapCtx.fillStyle = appThemeMode === 'light' ? '#ffffff' : '#0a0f14';
-    minimapCtx.fillRect(0,0,minimapCanvas.width,minimapCanvas.height);
-    minimapCtx.strokeStyle = appThemeMode === 'light' ? 'rgba(20, 20, 20, 0.35)' : 'rgba(245, 245, 245, 0.35)';
-    minimapCtx.lineWidth = 1;
-    minimapCtx.strokeRect(0.5, 0.5, minimapCanvas.width - 1, minimapCanvas.height - 1);
-    // draw japan extents
     if (japanBounds) {
-        minimapCtx.strokeStyle = appThemeMode === 'light' ? 'rgba(150, 150, 150, 0.9)' : 'rgba(210, 210, 210, 0.9)';
-        minimapCtx.lineWidth = 1;
-        prefectureRegionData.forEach(region => {
-            const coords = region.geometry && region.geometry.coordinates;
-            drawMinimapGeometry(minimapCtx, coords, rect);
-        });
+        minimapCtx.drawImage(getMinimapBaseLayer(rect), 0, 0);
         // draw viewport box
         if (window.currentTipPos) {
             const target = window.currentTipPos;
@@ -249,6 +261,11 @@ function updateMinimap() {
             minimapCtx.strokeRect(p1.x, p1.y, vw, vh);
         }
     } else {
+        minimapCtx.fillStyle = appThemeMode === 'light' ? '#ffffff' : '#0a0f14';
+        minimapCtx.fillRect(0,0,minimapCanvas.width,minimapCanvas.height);
+        minimapCtx.strokeStyle = appThemeMode === 'light' ? 'rgba(20, 20, 20, 0.35)' : 'rgba(245, 245, 245, 0.35)';
+        minimapCtx.lineWidth = 1;
+        minimapCtx.strokeRect(0.5, 0.5, minimapCanvas.width - 1, minimapCanvas.height - 1);
         minimapCtx.fillStyle = appThemeMode === 'light' ? '#ffffff' : '#05151b';
         minimapCtx.fillRect(rect.x, rect.y, rect.width, rect.height);
     }
@@ -264,40 +281,6 @@ function extractPrefectureLabel(properties = {}) {
     const stringValues = Object.values(properties).filter(value => typeof value === 'string' && value.trim());
     const japaneseValue = stringValues.find(value => /[都道府県]/.test(value));
     return japaneseValue || stringValues[0] || '';
-}
-
-function pointInRing(lon, lat, ring) {
-    let inside = false;
-
-    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-        const xi = ring[i][0];
-        const yi = ring[i][1];
-        const xj = ring[j][0];
-        const yj = ring[j][1];
-
-        const intersects = ((yi > lat) !== (yj > lat)) && (lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi);
-        if (intersects) inside = !inside;
-    }
-
-    return inside;
-}
-
-function pointInPolygon(lon, lat, polygonCoordinates) {
-    if (!polygonCoordinates || polygonCoordinates.length === 0) return false;
-    if (!pointInRing(lon, lat, polygonCoordinates[0])) return false;
-
-    for (let i = 1; i < polygonCoordinates.length; i++) {
-        if (pointInRing(lon, lat, polygonCoordinates[i])) return false;
-    }
-
-    return true;
-}
-
-function geometryContainsPoint(geometry, lon, lat) {
-    if (!geometry) return false;
-    if (geometry.type === 'Polygon') return pointInPolygon(lon, lat, geometry.coordinates);
-    if (geometry.type === 'MultiPolygon') return geometry.coordinates.some(polygon => pointInPolygon(lon, lat, polygon));
-    return false;
 }
 
 function makePrefectureShape(ring) {
@@ -389,80 +372,17 @@ function refreshPrefectureRevealGroupVisibility() {
     prefectureRevealGroup.visible = prefectureRevealEnabled && hasVisiblePrefecture;
 }
 
+// 県ごとの「初訪問時刻」(ビルド時に計算済み) と比べるだけなので、
+// 早送り・巻き戻しどちらでも 47 県分のループで済む
 function syncPrefectureRevealToTime(targetTime) {
-    if (targetTime == null) return;
+    if (targetTime == null || !prefectureFirstVisit) return;
 
-    // If prefecture points aren't ready, fallback to slower method once
-    if (!prefectureTrailPointsReady) {
-        updatePrefectureTargetsForTime(targetTime);
-        lastPlaybackTime = targetTime;
-        return;
+    visitedPrefectures.clear();
+    for (const name in prefectureFirstVisit) {
+        if (prefectureFirstVisit[name] <= targetTime) visitedPrefectures.add(name);
     }
-
-    // forward playback: advance cursor and reveal new prefectures incrementally
-    if (lastPlaybackTime == null || targetTime >= lastPlaybackTime) {
-        while (prefectureRevealCursor < prefectureTrailPoints.length && prefectureTrailPoints[prefectureRevealCursor].time <= targetTime) {
-            const point = prefectureTrailPoints[prefectureRevealCursor];
-            if (point.prefecture && point.prefecture !== '不明') {
-                visitedPrefectures.add(point.prefecture);
-                const state = prefectureRevealState.get(point.prefecture);
-                if (state) state.target = PREFECTURE_FILL_TARGET_OPACITY;
-            }
-            prefectureRevealCursor += 1;
-        }
-    } else {
-        // rewind: binary search last index <= targetTime, rebuild visited set
-        let low = 0, high = prefectureTrailPoints.length - 1, idx = -1;
-        while (low <= high) {
-            const mid = Math.floor((low + high) / 2);
-            if (prefectureTrailPoints[mid].time <= targetTime) { idx = mid; low = mid + 1; }
-            else high = mid - 1;
-        }
-
-        visitedPrefectures.clear();
-        if (idx >= 0) {
-            for (let i = 0; i <= idx; i++) {
-                const p = prefectureTrailPoints[i];
-                if (p.prefecture && p.prefecture !== '不明') visitedPrefectures.add(p.prefecture);
-            }
-        }
-
-        // update all region targets based on rebuilt visited set
-        prefectureRegionData.forEach(region => {
-            const state = prefectureRevealState.get(region.name);
-            if (!state) return;
-            state.target = visitedPrefectures.has(region.name) ? PREFECTURE_FILL_TARGET_OPACITY : 0;
-        });
-
-        prefectureRevealCursor = idx + 1;
-    }
-
-    lastPlaybackTime = targetTime;
-}
-
-function updatePrefectureTargetsForTime(targetTime) {
-    if (targetTime == null) return;
-
-    const regionVisitedByTime = (region) => {
-        if (prefectureTrailPointsReady && prefectureTrailPoints.length > 0) {
-            return prefectureTrailPoints.some(p => p.prefecture === region.name && p.time <= targetTime);
-        }
-
-        if (cachedValidData && cachedValidData.length > 0) {
-            for (let i = 0; i < cachedValidData.length; i++) {
-                const p = cachedValidData[i];
-                if (p.time > targetTime) break;
-                if (geometryContainsPoint(region.geometry, p.lon, p.lat)) return true;
-            }
-        }
-        return false;
-    };
-
-    prefectureRegionData.forEach(region => {
-        const state = prefectureRevealState.get(region.name);
-        if (!state) return;
-        const shouldShow = regionVisitedByTime(region);
-        state.target = shouldShow ? PREFECTURE_FILL_TARGET_OPACITY : 0;
+    prefectureRevealState.forEach((state, name) => {
+        state.target = visitedPrefectures.has(name) ? PREFECTURE_FILL_TARGET_OPACITY : 0;
     });
 }
 
@@ -492,12 +412,18 @@ function updatePrefectureRevealAnimation() {
     refreshPrefectureRevealGroupVisibility();
 }
 
-const prefectureDataPromise = d3.json(JAPAN_PREF_JSON_URL)
+const prefectureDataPromise = fetch(JAPAN_PREF_JSON_URL)
+    .then(response => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+    })
     .then(data => {
         data.features.forEach(feature => {
             if (!feature.geometry) return;
             registerPrefectureFeature(feature);
         });
+        minimapBaseLayer = null; // 県境が揃ったのでミニマップの下絵を作り直す
+        if (latestPlaybackTime != null) syncPrefectureRevealToTime(latestPlaybackTime);
         return data;
     })
     .catch((error) => {
@@ -515,7 +441,6 @@ function drawPolygon(coords, group) {
 // ==========================================
 // 4. データ読み込みと厳密な距離計算・描画
 // ==========================================
-const CSV_FILE_URL = '260319_aslog.csv';
 const ALT_SCALE = 0.0003; 
 const BASE_HEIGHT = 0.05; 
 
@@ -868,22 +793,10 @@ function updateTrajectory(progress) {
         else if (currentTime < TIME_UNIV_2) currentMarker.material.color.setHex(0x00d2ff);
         else currentMarker.material.color.setHex(0xccff00);
 
-        // ★追加：二分探索で現在の時刻に合致する「累積距離」を取得し、UIを更新
-        if (cumulativeDistances.length > 0) {
-            let low = 0, high = cumulativeDistances.length - 1;
-            let currentDist = 0;
-            while(low <= high) {
-                let mid = Math.floor((low + high) / 2);
-                if(cumulativeDistances[mid].time <= currentTime) {
-                    currentDist = cumulativeDistances[mid].dist;
-                    low = mid + 1;
-                } else {
-                    high = mid - 1;
-                }
-            }
-            document.getElementById('ui-total-dist').innerHTML = 
-                `${Math.floor(currentDist).toLocaleString()} <span style="font-size: 12px; color: #aaaaaa;">km</span>`;
-        }
+        // 現在時刻までの累積距離 (trajectory-loader.js で二分探索)
+        const currentDist = getCumulativeDistanceAt(currentTime);
+        document.getElementById('ui-total-dist').innerHTML =
+            `${Math.floor(currentDist).toLocaleString()} <span style="font-size: 12px; color: #aaaaaa;">km</span>`;
     }
 
     updateDashboardStats(currentTime || latestPlaybackTime);

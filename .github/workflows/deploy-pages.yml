@@ -34,10 +34,17 @@ jobs:
         with:
           enablement: true
 
+      # サイトに必要なファイルだけを公開する (元の CSV や旧ファイルは公開しない)
+      - name: Prepare site files
+        run: |
+          mkdir -p _site/data
+          cp index.html style.css main.js trajectory-loader.js _site/
+          cp data/trajectory.bin.gz data/japan-prefectures.json _site/data/
+
       - name: Upload site artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: _site
 
       - name: Deploy to GitHub Pages
         id: deployment

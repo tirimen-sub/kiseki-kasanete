@@ -8,12 +8,13 @@
 // 入力:
 //   *_aslog.csv                 … 位置ログ (期間ごとに分かれていてよい。重複行は自動で除く)
 //   data/japan-prefectures.json … 県境 (座標を丸めて軽量化したもの)
+//   data/philippines.json       … フィリピンの国境 (Natural Earth)
 // 出力:
-//   data/trajectory.bin.gz      … 時刻・緯度・経度・高度・累積距離を詰めたバイナリ (gzip)
+//   data/trajectory.bin.gz      … 時刻・緯度・経度・表示用高度・累積距離・飛行区間を詰めたバイナリ (gzip)
 //
-// これまでブラウザ側で毎回やっていた
-//   CSV のパース / ソート / 累積距離の計算 / 37 万点 × 47 県の県判定
-// をここで一度だけ済ませておく。
+// やっていること:
+//   CSV のパース / ソート / GPS の飛び値除去 / 累積距離 / 県 (国) 判定 /
+//   飛行区間の検出 / 表示用高度の平滑化
 // ==========================================
 import fs from 'node:fs';
 import path from 'node:path';
@@ -25,10 +26,10 @@ const CSV_PATHS = (process.argv.length > 2
     ? process.argv.slice(2)
     : fs.readdirSync(ROOT).filter(name => name.endsWith('_aslog.csv')).sort()
 ).map(name => path.resolve(ROOT, name));
-const GEOJSON_PATH = path.join(ROOT, 'data/japan-prefectures.json');
+const REGION_GEOJSON_PATHS = ['data/japan-prefectures.json', 'data/philippines.json'].map(p => path.join(ROOT, p));
 const OUT_PATH = path.join(ROOT, 'data/trajectory.bin.gz');
 
-const FORMAT_VERSION = 1;
+const FORMAT_VERSION = 2;
 const LATLON_SCALE = 1e6; // 1e-6 度 (≒ 0.1m) 単位で量子化
 const ALT_SCALE = 10;     // 0.1m 単位で量子化
 const DIST_SCALE = 1000;  // 累積距離は m 単位で保持
@@ -205,6 +206,134 @@ function computePrefectureFirstVisits(points, findPrefecture) {
     return firstVisit;
 }
 
+// ---------- GPS の飛び値除去 ----------
+// 一瞬だけ数百 km 先に飛んで戻ってくる点 (古い位置のまま記録された点や精度の悪い点) を除く。
+// 「近くに固まった点の並び B」の前後 A → B → C を見て、
+//   ・A→B と B→C がどちらも飛行機でもあり得ない速さ、または
+//   ・B だけが大きく離れていて A と C は近い
+// なら B を飛び値とみなす。
+const SPIKE_MIN_KM = 50;
+const IMPOSSIBLE_KMH = 1500;
+const CLUSTER_KM = 2;
+const CLUSTER_MAX_POINTS = 2000;
+
+function hopSpeedKmh(a, b) {
+    const hours = Math.max((b.time - a.time) / 3.6e6, 1 / 3600);
+    return haversineDistance(a.lat, a.lon, b.lat, b.lon) / hours;
+}
+
+function removeGpsSpikes(points) {
+    const keep = new Uint8Array(points.length).fill(1);
+    let removed = 0;
+    for (let i = 1; i < points.length - 1; i++) {
+        const a = points[i - 1];
+        const b = points[i];
+        if (haversineDistance(a.lat, a.lon, b.lat, b.lon) < SPIKE_MIN_KM) continue;
+        // b から始まる「近くに固まった点の並び」の終わりを探す
+        let j = i;
+        while (j + 1 < points.length && j - i < CLUSTER_MAX_POINTS
+            && haversineDistance(b.lat, b.lon, points[j + 1].lat, points[j + 1].lon) < CLUSTER_KM) j++;
+        if (j + 1 >= points.length) break;
+        const last = points[j];
+        const c = points[j + 1];
+        const dIn = haversineDistance(a.lat, a.lon, b.lat, b.lon);
+        const dOut = haversineDistance(last.lat, last.lon, c.lat, c.lon);
+        if (dOut < SPIKE_MIN_KM) continue;
+        const bothImpossible = hopSpeedKmh(a, b) > IMPOSSIBLE_KMH && hopSpeedKmh(last, c) > IMPOSSIBLE_KMH;
+        const returnsBack = haversineDistance(a.lat, a.lon, c.lat, c.lon) < 0.5 * Math.min(dIn, dOut);
+        if (bothImpossible || returnsBack) {
+            for (let k = i; k <= j; k++) keep[k] = 0;
+            removed += j - i + 1;
+            i = j;
+        }
+    }
+    return { points: points.filter((_, i) => keep[i]), removed };
+}
+
+// ---------- 飛行区間の検出 ----------
+// 上空 (3000m 超) の点を核にして、
+// 前後に地上 (300m 以下かつ低速) の点が出てくるところまで広げたものを 1 回のフライトとする。
+// 出発地と到着地が 100km 以上離れているものだけを採用する。
+// (速さだけで判定すると、新幹線の GPS の瞬間的なズレを飛行機と誤認するので使わない)
+const FLIGHT_CORE_ALT = 3000;
+const GROUND_ALT = 300;
+const GROUND_KMH = 150;
+const FLIGHT_MERGE_MS = 40 * 60 * 1000;
+const FLIGHT_EXPAND_MS = 60 * 60 * 1000;
+const FLIGHT_MIN_KM = 100;
+
+function detectFlights(points) {
+    const n = points.length;
+    const isCore = (i) => points[i].alt > FLIGHT_CORE_ALT;
+    // 上空にいる、または直前の点から速く移動してきた (記録が途切れたまま遠くへ移動した場合も含む)
+    const isAirborne = (i) => {
+        if (i <= 0 || i >= n) return false;
+        const p = points[i];
+        if (p.alt > GROUND_ALT) return true;
+        const q = points[i - 1];
+        const dist = haversineDistance(q.lat, q.lon, p.lat, p.lon);
+        return hopSpeedKmh(q, p) > GROUND_KMH && (p.time - q.time < 5 * 60 * 1000 || dist > 50);
+    };
+    // 機内で一瞬だけ混ざる古い位置 (高度 0m) などに引っかからないよう、2 点先まで見て判定する
+    const airborneNear = (i, dir) => isAirborne(i) || isAirborne(i + dir) || isAirborne(i + 2 * dir);
+
+    // 核となる点を時間的に近いものどうしでまとめる
+    const runs = [];
+    for (let i = 0; i < n; i++) {
+        if (!isCore(i)) continue;
+        const last = runs[runs.length - 1];
+        if (last && points[i].time - points[last.end].time < FLIGHT_MERGE_MS) last.end = i;
+        else runs.push({ start: i, end: i });
+    }
+
+    const flights = [];
+    for (const run of runs) {
+        let dep = run.start;
+        while (dep > 0 && points[run.start].time - points[dep].time < FLIGHT_EXPAND_MS && airborneNear(dep, -1)) dep--;
+        let arr = run.end;
+        while (arr < n - 1 && points[arr].time - points[run.end].time < FLIGHT_EXPAND_MS && airborneNear(arr, 1)) arr++;
+        const prev = flights[flights.length - 1];
+        if (prev && dep <= prev[1]) { prev[1] = Math.max(prev[1], arr); continue; }
+        flights.push([dep, arr]);
+    }
+    return flights.filter(([dep, arr]) =>
+        haversineDistance(points[dep].lat, points[dep].lon, points[arr].lat, points[arr].lon) >= FLIGHT_MIN_KM);
+}
+
+// ---------- 表示用の高度 ----------
+// 地上の移動だけを対象に、中央値 (単発の高度の飛び値を消す) → 移動平均でならす。
+// 飛行区間の途中の点はブラウザ側で放物線に置き換えるので、平滑化の計算から外す。
+const SMOOTH_WINDOW = 2;
+const MAX_GROUND_ALT = 4000;
+
+function computeDisplayAltitudes(points, flights) {
+    const n = points.length;
+    const interior = new Uint8Array(n);
+    for (const [dep, arr] of flights) for (let k = dep + 1; k < arr; k++) interior[k] = 1;
+
+    const windowValues = (src, i) => {
+        const values = [];
+        for (let j = Math.max(0, i - SMOOTH_WINDOW); j <= Math.min(n - 1, i + SMOOTH_WINDOW); j++) {
+            if (!interior[j]) values.push(src[j]);
+        }
+        return values;
+    };
+    const raw = points.map(p => Math.min(p.alt, MAX_GROUND_ALT));
+    const median = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+        if (interior[i]) continue;
+        const v = windowValues(raw, i).sort((a, b) => a - b);
+        median[i] = v[v.length >> 1];
+    }
+    const out = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+        if (interior[i]) continue;
+        const v = windowValues(median, i);
+        out[i] = v.reduce((sum, x) => sum + x, 0) / v.length;
+    }
+    return out;
+}
+
 // ---------- エンコード ----------
 // 各列を整数に量子化 → 差分符号化 → Int32 で列ごとに並べる。
 // 差分は小さい値ばかりになるので gzip がよく効く。
@@ -222,13 +351,23 @@ function deltaEncode(values, base) {
 
 function main() {
     const t0 = Date.now();
-    const points = loadPoints(CSV_PATHS);
-    if (points.length === 0) throw new Error('有効な位置データがありません');
-    console.log(`points: ${points.length}`);
+    const loaded = loadPoints(CSV_PATHS);
+    if (loaded.length === 0) throw new Error('有効な位置データがありません');
+    const { points, removed } = removeGpsSpikes(loaded);
+    console.log(`points: ${points.length} (GPS の飛び値 ${removed} 点を除去)`);
 
     const cumulative = computeCumulativeDistances(points);
-    const geojson = JSON.parse(fs.readFileSync(GEOJSON_PATH, 'utf8'));
+    const geojson = {
+        features: REGION_GEOJSON_PATHS.flatMap(file => JSON.parse(fs.readFileSync(file, 'utf8')).features),
+    };
     const prefectureFirstVisit = computePrefectureFirstVisits(points, buildPrefectureIndex(geojson));
+    const flights = detectFlights(points);
+    const displayAlt = computeDisplayAltitudes(points, flights);
+    flights.forEach(([dep, arr]) => {
+        const a = points[dep], b = points[arr];
+        console.log(`  flight ${new Date(a.time).toISOString().slice(0, 16)}Z  ${a.lat.toFixed(2)},${a.lon.toFixed(2)} -> ${b.lat.toFixed(2)},${b.lon.toFixed(2)}  ${haversineDistance(a.lat, a.lon, b.lat, b.lon).toFixed(0)}km`);
+    });
+    console.log(`flights: ${flights.length}`);
     console.log(`prefectures visited: ${Object.keys(prefectureFirstVisit).length}`);
     console.log(`total distance: ${cumulative[cumulative.length - 1].toFixed(1)} km`);
 
@@ -237,7 +376,7 @@ function main() {
     const times = points.map(p => p.time);
     const lats = q(points.map(p => p.lat), LATLON_SCALE);
     const lons = q(points.map(p => p.lon), LATLON_SCALE);
-    const alts = q(points.map(p => p.alt), ALT_SCALE);
+    const alts = q(Array.from(displayAlt), ALT_SCALE);
     const dists = q(Array.from(cumulative), DIST_SCALE);
 
     const header = {
@@ -247,6 +386,7 @@ function main() {
         scale: { time: 1, lat: LATLON_SCALE, lon: LATLON_SCALE, alt: ALT_SCALE, dist: DIST_SCALE },
         columns: ['time', 'lat', 'lon', 'alt', 'dist'],
         prefectureFirstVisit,
+        flights,
     };
     const columns = {
         time: deltaEncode(times, header.base.time),

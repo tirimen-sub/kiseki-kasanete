@@ -12,3 +12,5 @@ Three.js で描画し、GitHub Pages で公開しています。
 ## 出典
 
 地図データ: 地球地図日本 (国土地理院) — [dataofjapan/land](https://github.com/dataofjapan/land) の `japan.geojson` を加工して使用
+
+フィリピンの地図データ: [Natural Earth](https://www.naturalearthdata.com/)

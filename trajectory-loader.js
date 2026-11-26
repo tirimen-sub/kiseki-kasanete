@@ -11,6 +11,8 @@ let trajectoryTimes = null;
 let trajectoryCumulativeKm = null;
 // 県ラベル → 最初に訪れた時刻 (ms)
 let prefectureFirstVisit = null;
+// 各フライトの出発時刻 (リザルト画面の集計用)
+let flightDepartureTimes = [];
 
 window.syncTrajectoryGlowVisibility = (mode = window.appThemeMode || 'dark') => {
     const isLight = mode === 'light';
@@ -278,6 +280,7 @@ async function buildTrajectoryScene(data) {
     trajectoryTimes = data.time;
     trajectoryCumulativeKm = data.distKm;
     prefectureFirstVisit = data.prefectureFirstVisit;
+    flightDepartureTimes = Array.from(data.flightArrivalByDeparture.keys(), dep => data.time[dep]);
     if (latestPlaybackTime != null) syncPrefectureRevealToTime(latestPlaybackTime);
 
     document.getElementById('ui-total-dist').innerHTML = `0 <span style="font-size: 12px; color: #aaaaaa;">km</span>`;

@@ -470,6 +470,14 @@ const COLOR_U2 = new THREE.Color(0x7fd36a);
 const COLOR_U3 = new THREE.Color(0xb36bff);
 let showPrefectureReveal = true;
 
+// リザルト画面などで使う時期の一覧 (getEraCode の並びと対応)
+const ERA_INFO = [
+    { code: 'hs', label: '高校', color: '#ff0044' },
+    { code: 'u1', label: '大学1年', color: '#00d2ff' },
+    { code: 'u2', label: '大学2年', color: '#7fd36a' },
+    { code: 'u3', label: '大学3年', color: '#b36bff' },
+];
+
 function getEraCode(t) {
     if (t < TIME_UNIV_1) return 'hs';
     if (t < TIME_UNIV_2) return 'u1';
@@ -573,8 +581,101 @@ function closeHelpModal() {
     if (helpBackdrop) helpBackdrop.classList.remove('visible');
 }
 
+// ---------- リザルト (時期ごとの移動距離) ----------
+const resultButton = document.getElementById('result-button');
+const resultModal = document.getElementById('result-modal');
+const resultCloseButton = document.getElementById('result-close-button');
+const resultTotal = document.getElementById('result-total');
+const resultEraList = document.getElementById('result-era-list');
+let resultShownAfterPlayback = false;
+
+const formatDate = (t) => {
+    const d = new Date(t);
+    return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+};
+const formatKm = (km) => Math.round(km).toLocaleString();
+
+function computeEraSummary() {
+    if (!trajectoryTimes || trajectoryTimes.length === 0) return null;
+    const n = trajectoryTimes.length;
+    const eras = ERA_INFO.map(info => ({ ...info, first: -1, last: -1, km: 0, flights: 0, newPrefectures: 0, overseas: [] }));
+    const byCode = Object.fromEntries(eras.map(era => [era.code, era]));
+
+    // 時刻は昇順なので、時期ごとに最初と最後の点を拾えば累積距離の差で距離が出る
+    for (let i = 0; i < n; i++) {
+        const era = byCode[getEraCode(trajectoryTimes[i])];
+        if (era.first < 0) era.first = i;
+        era.last = i;
+    }
+    eras.forEach(era => {
+        if (era.first < 0) return;
+        const before = era.first > 0 ? trajectoryCumulativeKm[era.first - 1] : 0;
+        era.km = trajectoryCumulativeKm[era.last] - before;
+    });
+    flightDepartureTimes.forEach(t => { byCode[getEraCode(t)].flights++; });
+    Object.entries(prefectureFirstVisit || {}).forEach(([name, t]) => {
+        const era = byCode[getEraCode(t)];
+        if (overseasRegionNames.has(name)) era.overseas.push(name);
+        else era.newPrefectures++;
+    });
+
+    return {
+        eras: eras.filter(era => era.first >= 0),
+        totalKm: trajectoryCumulativeKm[n - 1],
+        firstTime: trajectoryTimes[0],
+        lastTime: trajectoryTimes[n - 1],
+    };
+}
+
+function renderResultModal() {
+    const summary = computeEraSummary();
+    if (!summary || !resultTotal || !resultEraList) return;
+    const maxKm = Math.max(...summary.eras.map(era => era.km), 1);
+
+    resultTotal.innerHTML = `
+        <span class="result-total-label">総移動距離</span>
+        <span class="result-total-value">${formatKm(summary.totalKm)}<span class="result-unit"> km</span></span>
+        <span class="result-period">${formatDate(summary.firstTime)} 〜 ${formatDate(summary.lastTime)}</span>`;
+
+    resultEraList.innerHTML = summary.eras.map(era => {
+        const notes = [];
+        if (era.flights > 0) notes.push(`飛行機 ${era.flights} 回`);
+        notes.push(`初めて訪れた都道府県 ${era.newPrefectures}`);
+        if (era.overseas.length > 0) notes.push(`海外: ${era.overseas.join('、')}`);
+        const share = summary.totalKm > 0 ? Math.round((era.km / summary.totalKm) * 100) : 0;
+        return `
+            <li class="result-era" style="--era-color: ${era.color}">
+                <div class="result-era-head">
+                    <span class="result-era-name"><span class="color-dot"></span>${era.label}</span>
+                    <span class="result-era-km">${formatKm(era.km)}<span class="result-unit"> km</span></span>
+                </div>
+                <div class="result-bar"><span style="width: ${(era.km / maxKm) * 100}%"></span></div>
+                <div class="result-era-meta">
+                    <span>${formatDate(trajectoryTimes[era.first])} 〜 ${formatDate(trajectoryTimes[era.last])}</span>
+                    <span>${share}%</span>
+                </div>
+                <div class="result-era-notes">${notes.join(' · ')}</div>
+            </li>`;
+    }).join('');
+}
+
+function openResultModal() {
+    renderResultModal();
+    closeHelpModal();
+    if (resultModal) resultModal.classList.add('visible');
+    if (helpBackdrop) helpBackdrop.classList.add('visible');
+}
+
+function closeResultModal() {
+    if (resultModal) resultModal.classList.remove('visible');
+    if (helpBackdrop && !(helpModal && helpModal.classList.contains('visible'))) helpBackdrop.classList.remove('visible');
+}
+
+if (resultButton) resultButton.addEventListener('click', openResultModal);
+if (resultCloseButton) resultCloseButton.addEventListener('click', closeResultModal);
+
 if (helpButton) helpButton.addEventListener('click', openHelpModal);
-if (helpBackdrop) helpBackdrop.addEventListener('click', closeHelpModal);
+if (helpBackdrop) helpBackdrop.addEventListener('click', () => { closeHelpModal(); closeResultModal(); });
 if (helpCloseButton) helpCloseButton.addEventListener('click', closeHelpModal);
 if (themeToggleButton) {
     themeToggleButton.addEventListener('click', () => {
@@ -584,7 +685,8 @@ if (themeToggleButton) {
 
 window.addEventListener('keydown', (event) => {
     if (event.key === interactionSettings.help.key || event.key === interactionSettings.help.key.toLowerCase()) openHelpModal();
-    if (event.key === interactionSettings.help.closeKey) closeHelpModal();
+    // event.key は 'Escape' (古いブラウザは 'Esc')
+    if (event.key === 'Escape' || event.key === 'Esc') { closeHelpModal(); closeResultModal(); }
 });
 
 const wheelRaycaster = new THREE.Raycaster();
@@ -856,6 +958,11 @@ function animate() {
         } else {
             isPlaying = false;
             if (playBtn) playBtn.innerText = "▶";
+            // 最後まで再生しきったら一度だけリザルトを出す
+            if (!resultShownAfterPlayback) {
+                resultShownAfterPlayback = true;
+                openResultModal();
+            }
         }
     }
 

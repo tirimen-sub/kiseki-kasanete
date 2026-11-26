@@ -114,7 +114,10 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
     return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-// 元実装と同じ「精度 30m 以内・10m〜1000km の移動のみ加算」ロジック
+// 精度 30m 以内の点どうしを結び、10m を超える移動を加算する。
+// (以前は 1000km 以上の移動を「GPS の誤り」として捨てていたが、記録が途切れたまま
+//  飛行機で 1000km 以上移動すると基準点が出発地に残り、その後の移動がすべて捨てられていた。
+//  GPS の飛び値は removeGpsSpikes で先に除いているので、上限は設けない)
 function computeCumulativeDistances(points) {
     const out = new Float64Array(points.length);
     let total = 0;
@@ -124,7 +127,7 @@ function computeCumulativeDistances(points) {
         if (p.acc <= 30) {
             if (last) {
                 const d = haversineDistance(last.lat, last.lon, p.lat, p.lon);
-                if (d > 0.01 && d < 1000) { total += d; last = p; }
+                if (d > 0.01) { total += d; last = p; }
             } else last = p;
         }
         out[i] = total;
